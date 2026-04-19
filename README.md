@@ -14,7 +14,7 @@
 
 ![Workflow demo](screenshots/demo.gif)
 
-📺 [Watch full walkthrough on YouTube](https://youtu.be/YOUR_VIDEO_ID)
+📺 [Watch full walkthrough on YouTube](https://www.youtube.com/watch?v=slbElyq-aEU)
 
 ---
 
