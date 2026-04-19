@@ -1,0 +1,22 @@
+# Never commit real credentials
+.env
+.env.local
+*.credentials.json
+secrets/
+
+# Local n8n data
+.n8n/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if you add scripts later)
+node_modules/
+npm-debug.log*
