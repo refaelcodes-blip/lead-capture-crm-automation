@@ -1,0 +1,333 @@
+{
+  "name": "Email / Lead Intake Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "id": "a1b2c3d4-0001-4a1a-9b11-111111111111",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-capture",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-4a1a-9b11-222222222222",
+      "name": "Webhook (Manual Lead)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        360
+      ],
+      "webhookId": "lead-capture-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalize input from either Gmail Trigger or Webhook\nconst item = $input.item.json;\n\nfunction asText(value) {\n  if (typeof value === 'string') return value;\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value);\n  if (Array.isArray(value)) {\n    return value.map((entry) => asText(entry)).filter(Boolean).join(', ');\n  }\n  if (value && typeof value === 'object') {\n    return asText(value.text || value.value || value.email || value.address || value.name || value.html || '');\n  }\n  return '';\n}\n\nconst looksLikeGmail = !!(item.threadId || item.historyId || item.internalDate || item.snippet || item.labelIds);\nconst webhookBody = item.body && typeof item.body === 'object' ? item.body : item;\n\nlet triggerType = 'unknown';\nlet source = 'unknown';\nlet subject = '';\nlet from = '';\nlet body = '';\nlet receivedAt = new Date().toISOString();\nlet messageId = '';\n\nif (looksLikeGmail) {\n  triggerType = 'gmail';\n  source = 'gmail';\n  subject = asText(item.subject || item.Subject);\n  from = asText(item.from || item.From || (item.headers && item.headers.from));\n  body = asText(item.text || item.snippet || item.textPlain || item.textHtml || item.html || '');\n  receivedAt = item.internalDate ? new Date(Number(item.internalDate)).toISOString() : receivedAt;\n  messageId = asText(item.id || item.messageId);\n} else {\n  triggerType = 'webhook';\n  source = asText(webhookBody.source) || 'webhook';\n  subject = asText(webhookBody.subject) || `Lead from ${asText(webhookBody.name) || 'unknown'}`;\n  from = asText(webhookBody.email || webhookBody.from);\n  const parts = [];\n  if (asText(webhookBody.name)) parts.push(`Name: ${asText(webhookBody.name)}`);\n  if (asText(webhookBody.email)) parts.push(`Email: ${asText(webhookBody.email)}`);\n  if (asText(webhookBody.phone)) parts.push(`Phone: ${asText(webhookBody.phone)}`);\n  if (asText(webhookBody.message)) parts.push(`Message: ${asText(webhookBody.message)}`);\n  body = parts.join('\\n');\n  messageId = asText(webhookBody.id || item.id);\n}\n\nreturn {\n  triggerType,\n  source,\n  subject: asText(subject).slice(0, 500),\n  from: asText(from).slice(0, 1000),\n  body: asText(body).slice(0, 6000),\n  receivedAt,\n  messageId,\n};"
+      },
+      "id": "a1b2c3d4-0003-4a1a-9b11-333333333333",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        230
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: \"You are a lead-intake classifier for an IT / automation agency. Read the incoming email or form message and return STRICTLY a valid JSON object with this schema:\\n{\\n  \\\"is_lead\\\": boolean,\\n  \\\"intent\\\": string,\\n  \\\"priority\\\": string,\\n  \\\"name\\\": string,\\n  \\\"email\\\": string,\\n  \\\"phone\\\": string,\\n  \\\"company\\\": string,\\n  \\\"budget\\\": string,\\n  \\\"services\\\": string[],\\n  \\\"summary\\\": string,\\n  \\\"language\\\": string,\\n  \\\"confidence\\\": number\\n}\\nReturn ONLY the JSON object.\"\n    }]\n  },\n  contents: [\n    {\n      role: 'user',\n      parts: [{\n        text: `From: ${$json.from}\\nSubject: ${$json.subject}\\nReceivedAt: ${$json.receivedAt}\\nSource: ${$json.source}\\n\\nBody:\\n${$json.body}`\n      }]\n    }\n  ],\n  generationConfig: {\n    temperature: 0.1,\n    maxOutputTokens: 800,\n    responseMimeType: 'application/json'\n  }\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1b2c3d4-0004-4a1a-9b11-444444444444",
+      "name": "LLM Classify & Extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        140,
+        230
+      ],
+      "continueOnFail": true,
+      "notesInFlow": true,
+      "notes": "Create an HTTP Header Auth credential. Header name: x-goog-api-key. Value: your Gemini API key."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const src = $('Normalize Input').item.json;\nconst input = $input.item.json || {};\n\nfunction stringify(value) {\n  if (typeof value === 'string') return value;\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value);\n  if (Array.isArray(value)) return value.map((entry) => stringify(entry)).filter(Boolean).join(', ');\n  if (value && typeof value === 'object') {\n    return stringify(value.text || value.value || value.email || value.address || value.name || value.html || '');\n  }\n  return '';\n}\n\nfunction firstNonEmpty(...values) {\n  for (const value of values) {\n    const text = stringify(value).trim();\n    if (text) return text;\n  }\n  return '';\n}\n\nfunction lineValue(label, text) {\n  const source = stringify(text);\n  const match = source.match(new RegExp(`(?:^|\\\\n)${label}:\\\\s*(.+)`, 'i'));\n  return match ? match[1].trim() : '';\n}\n\nfunction extractEmail(text) {\n  const source = stringify(text);\n  const match = source.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n  return match ? match[0] : '';\n}\n\nfunction extractPhone(text) {\n  const source = stringify(text);\n  const match = source.match(/(?:\\+?\\d[\\d\\s().-]{7,}\\d)/);\n  return match ? match[0].trim() : '';\n}\n\nfunction detectLanguage(text) {\n  const sample = stringify(text).trim();\n  if (!sample) return '';\n  if (/[\\u0400-\\u04FF]/.test(sample)) return 'ru';\n  if (/[\\u00BF\\u00A1\\u00F1\\u00E1\\u00E9\\u00ED\\u00F3\\u00FA]/i.test(sample)) return 'es';\n  return 'en';\n}\n\nfunction normalizePriority(value) {\n  const raw = stringify(value).trim().toLowerCase();\n  if (['high', 'urgent', 'critical'].includes(raw)) return 'high';\n  if (['medium', 'med', 'normal'].includes(raw)) return 'medium';\n  if (['low', 'minor'].includes(raw)) return 'low';\n  return '';\n}\n\nfunction detectServices(text) {\n  const lower = stringify(text).toLowerCase();\n  const matches = [];\n  const map = [\n    ['n8n automation', /\\bn8n\\b|workflow automation|business process automation|lead routing/],\n    ['crm integration', /\\bcrm\\b|hubspot|salesforce|pipedrive/],\n    ['ai automation', /\\bai\\b|llm|chatbot|openai|gemini/],\n    ['email automation', /\\bgmail\\b|email automation|mailbox automation/],\n    ['telegram automation', /\\btelegram\\b|bot/],\n    ['web development', /\\bwebsite\\b|\\bweb app\\b|landing page/],\n    ['custom integration', /integration|api|webhook/],\n  ];\n  for (const [label, regex] of map) {\n    if (regex.test(lower)) matches.push(label);\n  }\n  return matches;\n}\n\nfunction detectIntent(text) {\n  const lower = stringify(text).toLowerCase();\n  if (/(unsubscribe|newsletter|mailing list|promo code|discount)/.test(lower)) return 'spam';\n  if (/(job application|resume|curriculum vitae|\\bcv\\b|vacancy|looking for a job|hiring)/.test(lower)) return 'job_application';\n  if (/(support|bug|issue|incident|not working|problem|error)/.test(lower)) return 'support';\n  if (/(partner|partnership|collaboration|affiliate|reseller)/.test(lower)) return 'partnership';\n  if (/(quote|proposal|\\brfp\\b|estimate|pricing|price|cost|budget)/.test(lower)) return 'request_for_proposal';\n  if (/(demo|consultation|strategy call|book a call|meeting)/.test(lower)) return 'consultation';\n  if (/(automation|integration|crm|workflow|project|looking for|need help|need an?|want to build|interested in)/.test(lower)) return 'inquiry';\n  return 'other';\n}\n\nfunction detectIsLead(sourceText, intent, email, phone, triggerType) {\n  const lower = stringify(sourceText).toLowerCase();\n  const negative = /(unsubscribe|newsletter|mailing list|receipt|invoice|out of office|auto-reply|automatic reply|do not reply|no-reply)/.test(lower);\n  if (negative) return false;\n  if (intent === 'spam' || intent === 'job_application') return false;\n  const hasContact = !!(stringify(email) || stringify(phone));\n  const businessSignal = /(automation|integration|crm|workflow|project|quote|proposal|estimate|pricing|budget|demo|consultation|agency|implementation|development|software)/.test(lower);\n  if (triggerType === 'webhook' && hasContact) return true;\n  return hasContact && businessSignal;\n}\n\nfunction detectPriority(sourceText, intent, isLead) {\n  const lower = stringify(sourceText).toLowerCase();\n  if (/(urgent|asap|immediately|today|this week|deadline|high priority)/.test(lower)) return 'high';\n  if (intent === 'request_for_proposal') return 'high';\n  if (/(budget|\\$\\d|timeline|proposal|estimate|pricing)/.test(lower)) return 'high';\n  if (isLead || /(demo|consultation|meeting|call)/.test(lower)) return 'medium';\n  return 'low';\n}\n\nfunction safeJsonParse(text) {\n  const source = stringify(text);\n  const cleaned = source.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\n  if (!cleaned) return {};\n  try {\n    return JSON.parse(cleaned);\n  } catch (error) {\n    const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n    if (!match) return {};\n    try {\n      return JSON.parse(match[0]);\n    } catch (nestedError) {\n      return {};\n    }\n  }\n}\n\nlet llmRaw = '';\nif (Array.isArray(input.candidates) && input.candidates.length > 0) {\n  const parts = input.candidates[0].content?.parts;\n  if (Array.isArray(parts) && parts.length > 0) llmRaw = parts[0].text || '';\n} else if (Array.isArray(input.content) && input.content.length > 0) {\n  llmRaw = input.content[0].text || '';\n} else if (typeof input.content === 'string') {\n  llmRaw = input.content;\n} else if (typeof input.body === 'string') {\n  llmRaw = input.body;\n}\n\nconst parsed = typeof llmRaw === 'string' ? safeJsonParse(llmRaw) : (typeof llmRaw === 'object' && llmRaw ? llmRaw : {});\nconst llmOk = !!Object.keys(parsed || {}).length;\nconst llmError = firstNonEmpty(\n  input.message,\n  input.description,\n  input.error,\n  input.reason\n);\n\nconst srcSubject = stringify(src.subject);\nconst srcFrom = stringify(src.from);\nconst srcBody = stringify(src.body);\nconst combinedText = [srcSubject, srcFrom, srcBody].filter(Boolean).join('\\n');\nconst webhookName = lineValue('Name', srcBody);\nconst webhookEmail = lineValue('Email', srcBody);\nconst webhookPhone = lineValue('Phone', srcBody);\nconst webhookMessage = lineValue('Message', srcBody);\nconst subjectLeadMatch = srcSubject.match(/^Lead from\\s+(.+)$/i);\nconst senderEmail = extractEmail(srcFrom);\nconst bodyEmail = extractEmail(srcBody);\nconst fallbackEmail = firstNonEmpty(webhookEmail, parsed.email, senderEmail, bodyEmail);\nconst cleanedFromName = srcFrom.replace(/\\s*<[^>]+>\\s*/g, '').replace(/\"/g, '').trim();\nconst fallbackName = firstNonEmpty(\n  webhookName,\n  parsed.name,\n  subjectLeadMatch ? subjectLeadMatch[1].trim() : '',\n  cleanedFromName && cleanedFromName !== fallbackEmail ? cleanedFromName : ''\n);\nconst fallbackPhone = firstNonEmpty(webhookPhone, parsed.phone, extractPhone(srcBody));\nconst fallbackCompany = firstNonEmpty(parsed.company, lineValue('Company', srcBody));\nconst fallbackBudget = firstNonEmpty(parsed.budget, lineValue('Budget', srcBody));\nconst heuristicIntent = detectIntent(combinedText);\nconst derivedIsLead = detectIsLead(combinedText, parsed.intent || heuristicIntent, fallbackEmail, fallbackPhone, src.triggerType);\nconst heuristicPriority = detectPriority(combinedText, parsed.intent || heuristicIntent, derivedIsLead);\nconst serviceList = Array.isArray(parsed.services) && parsed.services.length > 0 ? parsed.services : detectServices(combinedText);\nconst normalizedPriority = normalizePriority(parsed.priority);\nconst bodySummary = firstNonEmpty(webhookMessage, srcBody).replace(/\\s+/g, ' ').trim().slice(0, 280);\n\nreturn {\n  received_at: stringify(src.receivedAt),\n  trigger_type: stringify(src.triggerType),\n  source: stringify(src.source),\n  subject: srcSubject,\n  raw_from: srcFrom,\n  message_id: stringify(src.messageId),\n  is_lead: typeof parsed.is_lead === 'boolean' ? parsed.is_lead : derivedIsLead,\n  intent: firstNonEmpty(parsed.intent, heuristicIntent, 'other'),\n  priority: firstNonEmpty(normalizedPriority, heuristicPriority, 'low'),\n  name: fallbackName,\n  email: fallbackEmail,\n  phone: fallbackPhone,\n  company: fallbackCompany,\n  budget: fallbackBudget,\n  services: Array.isArray(serviceList) ? serviceList.join(', ') : stringify(serviceList),\n  summary: firstNonEmpty(parsed.summary, bodySummary),\n  language: firstNonEmpty(parsed.language, detectLanguage(combinedText)),\n  confidence: typeof parsed.confidence === 'number' ? parsed.confidence : (llmOk ? 0.7 : (derivedIsLead ? 0.45 : 0.25)),\n  classification_mode: llmOk ? 'llm' : 'heuristic_fallback',\n  llm_error: llmOk ? '' : llmError,\n  message: firstNonEmpty(webhookMessage, srcBody).slice(0, 4000),\n  body_preview: srcBody.slice(0, 500),\n};"
+      },
+      "id": "a1b2c3d4-0005-4a1a-9b11-555555555555",
+      "name": "Build Structured Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        230
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-is-lead",
+              "leftValue": "={{$json.is_lead}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-4a1a-9b11-666666666666",
+      "name": "Is Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        230
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || \"YOUR_TELEGRAM_CHAT_ID\" }}",
+        "text": "={{ [\n  'New Lead (' + ($json.priority || 'low') + ')',\n  'Intent: ' + ($json.intent || 'other') + ' | Confidence: ' + ($json.confidence ?? 0),\n  'From: ' + ($json.name || $json.raw_from || 'unknown'),\n  'Email: ' + ($json.email || '-'),\n  'Phone: ' + ($json.phone || '-'),\n  'Company: ' + ($json.company || '-'),\n  'Budget: ' + ($json.budget || '-'),\n  'Services: ' + ($json.services || '-'),\n  'Language: ' + ($json.language || '-'),\n  '',\n  'Summary: ' + ($json.summary || '-'),\n  '',\n  'Subject: ' + ($json.subject || '-'),\n  'Source: ' + ($json.source || '-')\n].join('\\n') }}"
+      },
+      "id": "a1b2c3d4-0008-4a1a-9b11-888888888888",
+      "name": "Telegram Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        920,
+        320
+      ],
+      "continueOnFail": true,
+      "notesInFlow": true,
+      "notes": "Create a Telegram credential in n8n and set TELEGRAM_CHAT_ID or replace this placeholder."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  timestamp: $('Build Structured Lead').item.json.received_at,\n  name: $('Build Structured Lead').item.json.name || $('Build Structured Lead').item.json.raw_from || '',\n  email: $('Build Structured Lead').item.json.email || '',\n  phone: $('Build Structured Lead').item.json.phone || '',\n  message: $('Build Structured Lead').item.json.message || $('Build Structured Lead').item.json.body_preview || '',\n  source: $('Build Structured Lead').item.json.source || '',\n  intent: $('Build Structured Lead').item.json.intent || '',\n  priority: $('Build Structured Lead').item.json.priority || ''\n}) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-0007-4a1a-9b11-777777777777",
+      "name": "Google Sheets Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        320
+      ],
+      "continueOnFail": true,
+      "notesInFlow": true,
+      "notes": "Deploy scripts/google-sheets-apps-script.js as a Google Apps Script Web App and paste its /exec URL here."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $('Build Structured Lead').item.json;\n\nreturn {\n  status: lead.is_lead ? 'ok' : 'ignored',\n  is_lead: !!lead.is_lead,\n  intent: lead.intent || 'other',\n  priority: lead.priority || 'low',\n  source: lead.source || '',\n  classification_mode: lead.classification_mode || 'heuristic_fallback',\n  llm_error: lead.llm_error || '',\n};"
+      },
+      "id": "a1b2c3d4-000c-4a1a-9b11-cccccccccccc",
+      "name": "Build Webhook Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Email / Lead Intake Automation\nPublic template. Configure Gmail, Gemini, Telegram, and Google Sheets credentials before activating.\n\nFlow: Gmail Trigger or manual webhook -> Normalize -> Gemini structured JSON -> Is Lead -> Telegram -> Google Sheets -> webhook response.\n\nNo personal credentials are included in this repository.",
+        "height": 240,
+        "width": 620
+      },
+      "id": "a1b2c3d4-000a-4a1a-9b11-aaaaaaaaaaaa",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -220
+      ]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Manual Lead)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "LLM Classify & Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Classify & Extract": {
+      "main": [
+        [
+          {
+            "node": "Build Structured Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Structured Lead": {
+      "main": [
+        [
+          {
+            "node": "Is Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Lead?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Notify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Notify": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "UTC"
+  },
+  "versionId": "PUBLIC-TEMPLATE"
+}

@@ -20,3 +20,40 @@ Thumbs.db
 # Node (if you add scripts later)
 node_modules/
 npm-debug.log*
+# Local secrets and credentials
+tokens.txt
+config.json
+config/*.json
+!config/config.example.json
+*.env
+.env
+.env.*
+
+# n8n local runtime data
+.n8n/
+database.sqlite
+*.sqlite
+
+# Generated / temporary publishing files
+tools/
+patch_n8n_workflow.py
+fix_gmail_branch.py
+render_outro.cs
+render_outro.exe
+PUBLISH/
+
+# Large local media exports
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Python
+__pycache__/
+*.py[cod]
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

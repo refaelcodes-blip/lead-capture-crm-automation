@@ -1,0 +1,8 @@
+{
+  "TEST_TO_EMAIL": "your-lead-inbox@example.com",
+  "SMTP_HOST": "smtp.gmail.com",
+  "SMTP_PORT": 587,
+  "SMTP_USER": "your-sender@example.com",
+  "SMTP_PASS": "YOUR_GMAIL_APP_PASSWORD",
+  "SMTP_INSECURE_TLS": false
+}
