@@ -209,27 +209,27 @@
           "parameters": [
             {
               "name": "timestamp",
-              "value": "={ $('Prepare Payload').item.json.lead.timestamp }"
+              "value": "={{ $('Prepare Payload').item.json.lead.timestamp }}"
             },
             {
               "name": "name",
-              "value": "={ $('Prepare Payload').item.json.lead.name }"
+              "value": "={{ $('Prepare Payload').item.json.lead.fullName }}"
             },
             {
               "name": "email",
-              "value": "={ $('Prepare Payload').item.json.lead.email }"
+              "value": "={{ $('Prepare Payload').item.json.lead.email }}"
             },
             {
               "name": "phone",
-              "value": "={ $('Prepare Payload').item.json.lead.phone }"
+              "value": "={{ $('Prepare Payload').item.json.lead.phone }}"
             },
             {
               "name": "message",
-              "value": "={ $('Prepare Payload').item.json.lead.message }"
+              "value": "={{ $('Prepare Payload').item.json.lead.message }}"
             },
             {
               "name": "source",
-              "value": "={ $('Prepare Payload').item.json.lead.source }"
+              "value": "={{ $('Prepare Payload').item.json.lead.source }}"
             }
           ]
         },
