@@ -1,0 +1,423 @@
+{
+  "name": "Lead Capture + CRM Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "# Lead Capture + CRM Automation\n\nPublic template. Replace placeholders before activating.\n\nRequired setup:\n1. Configure Zoho OAuth placeholders in Refresh Zoho Token.\n2. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID or replace placeholders locally.\n3. Deploy the Google Apps Script Web App and replace YOUR_DEPLOYMENT_ID.\n4. Activate the workflow and send a POST request to /webhook/lead-capture.\n\nDo not commit real tokens, chat IDs, account IDs, or private deployment URLs.",
+        "height": 400,
+        "width": 560,
+        "color": 7
+      },
+      "id": "aabb0001-0001-0001-0001-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-capture",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "aabb0001-0002-0002-0002-000000000002",
+      "name": "Webhook: New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        160,
+        380
+      ],
+      "webhookId": "f3a1b2c4-d5e6-7890-abcd-ef1234567890"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ================================================\n// STEP 1: VALIDATE & PREPARE LEAD DATA\n// ================================================\nconst input = $input.first().json;\n// Support both direct body and nested body (from webhook)\nconst body = input.body ?? input;\n\nconst name    = String(body.name    ?? '').trim();\nconst email   = String(body.email   ?? '').trim().toLowerCase();\nconst phone   = String(body.phone   ?? '').trim();\nconst message = String(body.message ?? '').trim();\nconst source  = String(body.source  ?? 'Website').trim();\n\n// --- Validation ---\nconst errors = [];\nif (!name)  errors.push('Field name is required');\nif (!email) errors.push('Field email is required');\nif (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  errors.push('Invalid email format');\n}\n\nif (errors.length > 0) {\n  return [{ json: { valid: false, errors } }];\n}\n\n// --- Split full name into first/last ---\nconst parts     = name.split(/\\s+/);\nconst firstName = parts[0];\nconst lastName  = parts.slice(1).join(' ') || '-';\n\nreturn [{\n  json: {\n    valid: true,\n    firstName,\n    lastName,\n    fullName: name,\n    email,\n    phone,\n    message,\n    source,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "aabb0001-0003-0003-0003-000000000003",
+      "name": "Validate and Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-is-valid-001",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0004-0004-0004-000000000004",
+      "name": "Is Data Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://accounts.zoho.com/oauth/v2/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "client_id",
+              "value": "YOUR_ZOHO_CLIENT_ID"
+            },
+            {
+              "name": "client_secret",
+              "value": "YOUR_ZOHO_CLIENT_SECRET"
+            },
+            {
+              "name": "refresh_token",
+              "value": "YOUR_ZOHO_REFRESH_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0005-0005-0005-000000000005",
+      "name": "Refresh Zoho Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ================================================\n// STEP 2: PREPARE ALL API PAYLOADS\n// ================================================\nconst lead = $('Validate and Prepare').item.json;\nconst tokenResp = $('Refresh Zoho Token').item.json;\nconst accessToken = tokenResp.access_token;\n\nif (!accessToken) {\n  const errMsg = tokenResp.error || tokenResp.message || JSON.stringify(tokenResp);\n  throw new Error(\n    `Failed to get access_token from Zoho: ${errMsg}\\n` +\n    'Check client_id, client_secret, and refresh_token in node \"Refresh Zoho Token\".'\n  );\n}\n\nconst escapeHtml = (value) => String(value ?? '')\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;');\n\nconst zohoBody = JSON.stringify({\n  data: [{\n    First_Name: lead.firstName,\n    Last_Name: lead.lastName,\n    Email: lead.email,\n    Phone: lead.phone || '',\n    Description: lead.message || '',\n    Lead_Source: lead.source || 'Website'\n  }]\n});\n\nconst telegramBody = JSON.stringify({\n  chat_id: 'YOUR_TELEGRAM_CHAT_ID',\n  parse_mode: 'HTML',\n  text:\n    '<b>New Lead</b>\\n\\n' +\n    `<b>Name:</b> ${escapeHtml(lead.fullName)}\\n` +\n    `<b>Email:</b> ${escapeHtml(lead.email)}\\n` +\n    `<b>Phone:</b> ${escapeHtml(lead.phone || 'N/A')}\\n` +\n    `<b>Source:</b> ${escapeHtml(lead.source || 'Website')}\\n\\n` +\n    '<b>Message:</b>\\n' +\n    escapeHtml(lead.message || 'N/A')\n});\n\nreturn [{\n  json: {\n    lead,\n    accessToken,\n    zohoBody,\n    telegramBody\n  }\n}];"
+      },
+      "id": "aabb0001-0006-0006-0006-000000000006",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.zohoapis.com/crm/v2/Leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Zoho-oauthtoken {{$json.accessToken}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.zohoBody }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "aabb0001-0007-0007-0007-000000000007",
+      "name": "Create Zoho Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// ================================================\n// STEP 3: ENRICH WITH ZOHO LEAD ID\n// ================================================\nconst payloads = $('Prepare Payload').item.json;\nconst zohoResp = $input.first().json;\n\nlet zohoLeadId = 'N/A';\nlet zohoStatus = 'unknown';\n\ntry {\n  const result = Array.isArray(zohoResp.data) ? zohoResp.data[0] : undefined;\n  zohoLeadId = result?.details?.id || 'N/A';\n  zohoStatus = result?.status || 'unknown';\n} catch (error) {}\n\nconst telegramPayload = JSON.parse(payloads.telegramBody);\ntelegramPayload.text += `\\n\\n<b>Added to Zoho CRM</b>\\nID: <code>${zohoLeadId}</code>`;\n\nif (zohoStatus !== 'success') {\n  telegramPayload.text += '\\n\\n<b>Warning:</b> Zoho returned unexpected status: ' + zohoStatus;\n}\n\nreturn [{\n  json: {\n    ...payloads,\n    telegramBodyFinal: JSON.stringify(telegramPayload),\n    zohoLeadId,\n    zohoStatus,\n    zohoResponse: zohoResp\n  }\n}];"
+      },
+      "id": "aabb0001-0008-0008-0008-000000000008",
+      "name": "Enrich with CRM Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + ($env.TELEGRAM_BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN') + '/sendMessage' }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.telegramBodyFinal }}",
+        "options": {}
+      },
+      "id": "aabb0001-0009-0009-0009-000000000009",
+      "name": "Telegram Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timestamp",
+              "value": "={ $('Prepare Payload').item.json.lead.timestamp }"
+            },
+            {
+              "name": "name",
+              "value": "={ $('Prepare Payload').item.json.lead.name }"
+            },
+            {
+              "name": "email",
+              "value": "={ $('Prepare Payload').item.json.lead.email }"
+            },
+            {
+              "name": "phone",
+              "value": "={ $('Prepare Payload').item.json.lead.phone }"
+            },
+            {
+              "name": "message",
+              "value": "={ $('Prepare Payload').item.json.lead.message }"
+            },
+            {
+              "name": "source",
+              "value": "={ $('Prepare Payload').item.json.lead.source }"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "aabb0001-0010-0010-0010-000000000010",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        280
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', message: 'Lead successfully processed', zohoLeadId: $('Enrich with CRM Data').item.json.zohoLeadId, lead: { name: $('Enrich with CRM Data').item.json.lead.fullName, email: $('Enrich with CRM Data').item.json.lead.email }, timestamp: $('Enrich with CRM Data').item.json.lead.timestamp }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "aabb0001-0011-0011-0011-000000000011",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2320,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Input validation failed', errors: $json.errors }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "aabb0001-0012-0012-0012-000000000012",
+      "name": "Respond Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: New Lead": {
+      "main": [
+        [
+          {
+            "node": "Validate and Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Prepare": {
+      "main": [
+        [
+          {
+            "node": "Is Data Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Data Valid?": {
+      "main": [
+        [
+          {
+            "node": "Refresh Zoho Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Zoho Token": {
+      "main": [
+        [
+          {
+            "node": "Prepare Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Payload": {
+      "main": [
+        [
+          {
+            "node": "Create Zoho Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Zoho Lead": {
+      "main": [
+        [
+          {
+            "node": "Enrich with CRM Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich with CRM Data": {
+      "main": [
+        [
+          {
+            "node": "Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Notification": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "versionId": "PUBLIC-TEMPLATE",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "lead-capture-crm-workflow-v1"
+  }
+}

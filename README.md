@@ -1,80 +1,69 @@
-# Email / Lead Intake Automation
+# Lead Capture + CRM Automation
 
-An n8n workflow template for automated lead intake from Gmail and REST webhooks.
+An n8n workflow template for receiving website leads, validating required fields, creating Zoho CRM leads, notifying a manager in Telegram, and logging every lead to Google Sheets.
 
-The workflow receives an email or webhook payload, normalizes the input, classifies the message with an LLM, extracts structured lead fields, routes qualified leads, sends a Telegram notification, and logs the result to Google Sheets.
+This repository is a public-safe template. It does not include real tokens, account IDs, app passwords, API keys, or deployment URLs.
 
-## What It Shows
+## What It Does
 
-- Gmail Trigger for new unread emails
-- Manual webhook for REST API lead submissions
-- LLM classification with structured JSON output
-- Local fallback classification when the LLM API is rate-limited
-- Conditional routing with an `Is Lead?` node
-- Telegram lead notifications
-- Google Sheets logging through Google Apps Script
-- Python SMTP test script for generating test lead emails
+- Receives new leads through an n8n webhook.
+- Validates required fields such as name and email.
+- Refreshes a Zoho OAuth access token.
+- Creates a lead in Zoho CRM.
+- Enriches the execution data with the Zoho lead ID.
+- Sends a Telegram notification to a manager or sales team.
+- Logs the lead to Google Sheets through a Google Apps Script Web App.
+- Returns a success or validation-error response to the webhook caller.
 
 ## Repository Structure
 
 ```text
 workflows/
-  lead-intake-automation.json
+  lead-capture-crm-automation.json
 scripts/
   google-sheets-apps-script.js
-  send_test_lead.py
 config/
   config.example.json
-docs/
-  subtitles/
-  youtube/
 ```
 
 ## Quick Start
 
-1. Import `workflows/lead-intake-automation.json` into n8n.
-2. Create credentials in n8n for Gmail OAuth2, Gemini HTTP Header Auth, and Telegram.
-3. Deploy `scripts/google-sheets-apps-script.js` as a Google Apps Script Web App.
-4. Replace the placeholder Google Apps Script `/exec` URL in the `Google Sheets Webhook` node.
-5. Activate the workflow.
-6. Send a new unread test email to the Gmail account connected to the trigger.
+1. Import `workflows/lead-capture-crm-automation.json` into n8n.
+2. Replace Zoho placeholders in the `Refresh Zoho Token` node.
+3. Set your Telegram bot token and chat ID.
+4. Deploy `scripts/google-sheets-apps-script.js` as a Google Apps Script Web App.
+5. Replace the placeholder `/exec` URL in the `Log to Google Sheets` node.
+6. Activate the workflow.
+7. Send a test lead to the webhook endpoint.
 
 See [SETUP.md](SETUP.md) for the full setup guide.
 
+## Test Payload
+
+```bash
+curl -X POST https://YOUR_N8N/webhook/lead-capture \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "+15551234567",
+    "message": "I need CRM automation for incoming leads.",
+    "source": "Landing Page"
+  }'
+```
+
 ## Security
 
-This repository is a public-safe template. It intentionally does not include:
+Do not commit real credentials. Keep secrets in n8n credentials, environment variables, or a private secrets manager.
 
-- Gmail credentials
-- Gemini API keys
-- Telegram bot tokens
-- Telegram chat IDs
-- Google Apps Script deployment IDs
-- SMTP app passwords
-- `tokens.txt`
-- real `config.json`
+The sanitized workflow uses placeholders such as:
 
-Use `config/config.example.json` as a template and keep your real local config untracked.
-
-## Testing
-
-Copy the example config:
-
-```powershell
-Copy-Item config\config.example.json config\config.json
-```
-
-Edit `config/config.json` locally, then send a test lead email:
-
-```powershell
-python scripts\send_test_lead.py --config config\config.json --count 1
-```
-
-If your local Python certificate store has SMTP TLS verification issues, use `--insecure` only for local testing:
-
-```powershell
-python scripts\send_test_lead.py --config config\config.json --insecure
-```
+- `YOUR_ZOHO_CLIENT_ID`
+- `YOUR_ZOHO_CLIENT_SECRET`
+- `YOUR_ZOHO_REFRESH_TOKEN`
+- `YOUR_TELEGRAM_BOT_TOKEN`
+- `YOUR_TELEGRAM_CHAT_ID`
+- `https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec`
 
 ## License
 

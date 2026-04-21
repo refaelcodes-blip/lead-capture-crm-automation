@@ -6,12 +6,13 @@ This repository is designed to be safe to publish. It does not intentionally con
 
 Do not commit:
 
-- Gmail OAuth credentials
-- Gemini API keys
+- Zoho client IDs
+- Zoho client secrets
+- Zoho refresh tokens
+- Zoho access tokens
 - Telegram bot tokens
 - Telegram chat IDs
 - Google Apps Script deployment URLs
-- SMTP passwords or Gmail App Passwords
 - `tokens.txt`
 - real `config.json`
 - exported n8n credential files

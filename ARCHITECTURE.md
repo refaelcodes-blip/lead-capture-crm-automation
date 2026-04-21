@@ -3,94 +3,105 @@
 ## Flow
 
 ```text
-Gmail Trigger
+Webhook: New Lead
         |
         v
-Webhook (Manual Lead) -> Normalize Input
-                              |
-                              v
-                     LLM Classify & Extract
-                              |
-                              v
-                     Build Structured Lead
-                              |
-                              v
-                            Is Lead?
-                              |
-                              v
-                      Telegram Notify
-                              |
-                              v
-                    Google Sheets Webhook
-                              |
-                              v
-                    Build Webhook Response
+Validate & Prepare
+        |
+        v
+Is Data Valid?
+        |
+        +--> Validation Error Response
+        |
+        v
+Refresh Zoho Token
+        |
+        v
+Prepare Payload
+        |
+        v
+Create Zoho Lead
+        |
+        v
+Enrich with CRM Data
+        |
+        v
+Telegram Notification
+        |
+        v
+Log to Google Sheets
+        |
+        v
+Success Response
 ```
 
-## Input Sources
+## Input Schema
 
-The workflow supports two input paths:
-
-- Gmail Trigger for new unread emails.
-- Manual webhook for REST API lead submissions.
-
-`Normalize Input` converts both formats into one shared structure:
+The webhook expects a JSON payload:
 
 ```json
 {
-  "triggerType": "gmail",
-  "source": "gmail",
-  "subject": "Need CRM automation",
-  "from": "lead@example.com",
-  "body": "Message body",
-  "receivedAt": "2026-04-21T00:00:00.000Z",
-  "messageId": "message-id"
-}
-```
-
-## LLM Classification
-
-`LLM Classify & Extract` asks Gemini to return strict JSON:
-
-```json
-{
-  "is_lead": true,
-  "intent": "inquiry",
-  "priority": "medium",
   "name": "John Doe",
   "email": "john@example.com",
-  "phone": "+1-555-123-4567",
-  "company": "Example Co",
-  "budget": "$3,000 - $5,000",
-  "services": ["n8n automation", "CRM integration"],
-  "summary": "Lead needs Gmail intake and CRM sync.",
-  "language": "en",
-  "confidence": 0.8
+  "phone": "+15551234567",
+  "message": "I need CRM automation for incoming leads.",
+  "source": "Landing Page"
 }
 ```
 
-## Fallback Logic
+## Validation
 
-If the LLM API returns an error or quota limit, `Build Structured Lead` still extracts key lead fields using local heuristics.
+The `Validate & Prepare` node:
 
-This keeps the workflow operational even when the external AI service is temporarily unavailable.
+- Reads either the direct JSON payload or the nested webhook `body`.
+- Requires `name`.
+- Requires `email`.
+- Validates email format.
+- Splits full name into first and last name.
+- Adds an ISO timestamp.
 
-## Outputs
+## Zoho CRM
 
-Qualified leads are sent to:
+The `Refresh Zoho Token` node exchanges a refresh token for an access token.
 
-- Telegram, for immediate notification.
-- Google Sheets, for persistent lead logging.
+The `Create Zoho Lead` node sends the lead payload to:
 
-The webhook path also returns a compact JSON response:
+```text
+https://www.zohoapis.com/crm/v2/Leads
+```
+
+## Telegram
+
+The workflow prepares a human-readable HTML message with lead details and Zoho lead ID, then sends it through the Telegram Bot API.
+
+## Google Sheets
+
+The workflow logs the processed lead through a Google Apps Script Web App.
+
+Expected Sheet columns:
+
+```text
+timestamp | name | email | phone | message | source
+```
+
+## Response
+
+Successful response:
 
 ```json
 {
-  "status": "ok",
-  "is_lead": true,
-  "intent": "inquiry",
-  "priority": "medium",
-  "source": "Website Test",
-  "classification_mode": "heuristic_fallback"
+  "status": "success",
+  "message": "Lead successfully processed",
+  "zohoLeadId": "1234567890"
+}
+```
+
+Validation error response:
+
+```json
+{
+  "status": "error",
+  "message": "Input validation failed",
+  "errors": ["Field email is required"]
 }
 ```

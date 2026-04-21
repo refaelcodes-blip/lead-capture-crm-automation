@@ -37,7 +37,7 @@ database.sqlite
 # Generated / temporary publishing files
 tools/
 patch_n8n_workflow.py
-fix_gmail_branch.py
+fix_*_branch.py
 render_outro.cs
 render_outro.exe
 PUBLISH/

@@ -1,58 +1,67 @@
 # Troubleshooting
 
-## Only The Gmail Trigger Lights Up
-
-If you manually execute the Gmail Trigger node, n8n may show only the trigger node as successful.
-
-For the full Gmail path, keep the workflow active, send a new unread email to the connected inbox, wait for polling, and inspect the latest `trigger` execution in the Executions view.
-
-## Google Sheets Does Not Update
-
-Check these items:
-
-- The Apps Script Web App URL ends with `/exec`.
-- The deployment access is set to `Anyone`.
-- The `Google Sheets Webhook` node uses `POST` with JSON body.
-- The Sheet has headers: `timestamp`, `name`, `email`, `phone`, `message`, `source`, `intent`, `priority`.
-- The execution actually reaches the `Google Sheets Webhook` node.
-
-## Empty Rows In Google Sheets
-
-The included Apps Script ignores empty payloads. If you see empty rows, redeploy the latest version of `scripts/google-sheets-apps-script.js`.
-
-## Gemini Returns Quota Errors
-
-The workflow has fallback classification. A Gemini quota error should not stop the whole execution.
-
-If the LLM node returns `429`, the response may show:
-
-```json
-{
-  "classification_mode": "heuristic_fallback"
-}
-```
-
-## Telegram Does Not Send
+## Webhook Does Not Trigger
 
 Check:
 
-- Telegram credential is attached to the node.
-- Bot token is valid.
-- Chat ID is correct.
-- The bot has permission to message the target chat.
+- The workflow is active for production `/webhook/...` URLs.
+- You are using `/webhook-test/...` only while n8n is listening for a test event.
+- The request method is `POST`.
+- The request body is valid JSON.
 
-## Python SMTP Test Fails With TLS Certificate Error
+## Validation Error Response
 
-Use this only for local testing:
+The workflow requires:
 
-```powershell
-python scripts\send_test_lead.py --config config\config.json --insecure
+- `name`
+- `email`
+
+The email must look like a valid email address.
+
+## Zoho Token Refresh Fails
+
+Check:
+
+- `YOUR_ZOHO_CLIENT_ID` was replaced.
+- `YOUR_ZOHO_CLIENT_SECRET` was replaced.
+- `YOUR_ZOHO_REFRESH_TOKEN` was replaced.
+- The refresh token belongs to the correct Zoho data center.
+
+If you use a non-US Zoho data center, update the Zoho API host accordingly.
+
+## Zoho Lead Is Not Created
+
+Check the execution output of:
+
+```text
+Create Zoho Lead
 ```
 
-For production-like testing, fix the local Python or Windows certificate store instead of using `--insecure`.
+The node has `neverError` enabled, so Zoho API errors may appear in node output rather than stopping the workflow.
 
-## Python SMTP Test Sends But Gmail Trigger Does Not Run
+## Telegram Notification Does Not Send
 
-Make sure `TEST_TO_EMAIL` in `config/config.json` is the same Gmail inbox connected to the n8n Gmail Trigger credential.
+Check:
 
-Also confirm the email is unread and wait for the polling interval.
+- `TELEGRAM_BOT_TOKEN` is set or the placeholder was replaced locally.
+- `TELEGRAM_CHAT_ID` is set or the placeholder was replaced locally.
+- The bot has permission to send messages to the target chat.
+
+## Google Sheets Does Not Update
+
+Check:
+
+- The Apps Script Web App URL ends with `/exec`.
+- The Web App access is set to `Anyone`.
+- The Google Sheet has the expected header row.
+- The execution reaches `Log to Google Sheets`.
+
+## Empty Rows In Google Sheets
+
+Deploy the latest version of:
+
+```text
+scripts/google-sheets-apps-script.js
+```
+
+The included script ignores empty payloads.

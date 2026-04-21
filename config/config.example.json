@@ -1,8 +1,8 @@
 {
-  "TEST_TO_EMAIL": "your-lead-inbox@example.com",
-  "SMTP_HOST": "smtp.gmail.com",
-  "SMTP_PORT": 587,
-  "SMTP_USER": "your-sender@example.com",
-  "SMTP_PASS": "YOUR_GMAIL_APP_PASSWORD",
-  "SMTP_INSECURE_TLS": false
+  "ZOHO_CLIENT_ID": "YOUR_ZOHO_CLIENT_ID",
+  "ZOHO_CLIENT_SECRET": "YOUR_ZOHO_CLIENT_SECRET",
+  "ZOHO_REFRESH_TOKEN": "YOUR_ZOHO_REFRESH_TOKEN",
+  "TELEGRAM_BOT_TOKEN": "YOUR_TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_CHAT_ID": "YOUR_TELEGRAM_CHAT_ID",
+  "GOOGLE_SHEETS_WEBAPP_URL": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 }

@@ -2,51 +2,74 @@
 
 ## 1. Import The Workflow
 
-Open n8n and import:
+Import this file into n8n:
 
 ```text
-workflows/lead-intake-automation.json
+workflows/lead-capture-crm-automation.json
 ```
 
-The workflow is inactive by default. Configure all credentials before activating it.
+Keep the workflow inactive until every placeholder is configured.
 
-## 2. Configure Gmail Trigger
+## 2. Configure The Webhook
 
-Create a Gmail OAuth2 credential in n8n and attach it to the `Gmail Trigger` node.
-
-The template is configured to poll unread emails. For testing, send a new unread email to the connected Gmail inbox and wait for the polling interval.
-
-## 3. Configure Gemini
-
-Create an HTTP Header Auth credential in n8n:
+The workflow starts with:
 
 ```text
-Header name: x-goog-api-key
-Header value: YOUR_GEMINI_API_KEY
+Webhook: New Lead
 ```
 
-Attach it to the `LLM Classify & Extract` node.
+Production endpoint after activation:
 
-The workflow includes fallback classification so a Gemini quota error does not break the entire lead intake flow.
+```text
+https://YOUR_N8N/webhook/lead-capture
+```
+
+Test endpoint while listening in the editor:
+
+```text
+https://YOUR_N8N/webhook-test/lead-capture
+```
+
+## 3. Configure Zoho CRM
+
+Create or open a Zoho Self Client app in the Zoho API Console.
+
+Replace these placeholders in the `Refresh Zoho Token` node:
+
+```text
+YOUR_ZOHO_CLIENT_ID
+YOUR_ZOHO_CLIENT_SECRET
+YOUR_ZOHO_REFRESH_TOKEN
+```
+
+The node sends a `refresh_token` grant request to:
+
+```text
+https://accounts.zoho.com/oauth/v2/token
+```
+
+The resulting `access_token` is used by the `Create Zoho Lead` node.
 
 ## 4. Configure Telegram
 
-Create a Telegram credential in n8n and attach it to the `Telegram Notify` node.
+Set these values in your n8n environment or replace the placeholders locally:
 
-Set the chat ID in one of two ways:
+```text
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
 
-- Replace `YOUR_TELEGRAM_CHAT_ID` in the Telegram node.
-- Or set the `TELEGRAM_CHAT_ID` environment variable for your n8n instance.
+The Telegram node sends a formatted lead notification after Zoho CRM processing.
 
 ## 5. Configure Google Sheets
 
-Create a Google Sheet with these headers in row 1:
+Create a Google Sheet with this header row:
 
 ```text
-timestamp | name | email | phone | message | source | intent | priority
+timestamp | name | email | phone | message | source
 ```
 
-Open the Sheet, then go to:
+Open:
 
 ```text
 Extensions -> Apps Script
@@ -58,7 +81,7 @@ Paste the contents of:
 scripts/google-sheets-apps-script.js
 ```
 
-Deploy it as a Web App:
+Deploy as a Web App:
 
 ```text
 Deploy -> New deployment -> Web app
@@ -66,58 +89,31 @@ Execute as: Me
 Who has access: Anyone
 ```
 
-Copy the Web App URL ending in `/exec` and paste it into the `Google Sheets Webhook` node.
+Copy the Web App URL ending in `/exec` and paste it into the `Log to Google Sheets` node.
 
-## 6. Test The Webhook Path
+## 6. Test The Workflow
 
-Use the production webhook URL after activating the workflow:
+Send a lead payload:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:5678/webhook/lead-capture' -ContentType 'application/json' -Body (@{
   name='John Doe'
-  email='john@test.com'
-  phone='+1-555-123-4567'
-  message='We need n8n automation for lead routing, Gmail intake, and CRM sync.'
-  source='Website Test'
+  email='john@example.com'
+  phone='+15551234567'
+  message='I need CRM automation for incoming leads.'
+  source='Landing Page'
 } | ConvertTo-Json)
 ```
 
-For live editor testing, use the n8n test webhook URL while the workflow is listening:
+Expected result:
 
-```text
-http://127.0.0.1:5678/webhook-test/lead-capture
+```json
+{
+  "status": "success",
+  "message": "Lead successfully processed"
+}
 ```
 
-## 7. Test The Gmail Path With Python
+## 7. Validation Errors
 
-Copy the example config:
-
-```powershell
-Copy-Item config\config.example.json config\config.json
-```
-
-Edit `config/config.json` locally and add your SMTP test sender details.
-
-Send one test email:
-
-```powershell
-python scripts\send_test_lead.py --config config\config.json
-```
-
-Send three test emails:
-
-```powershell
-python scripts\send_test_lead.py --config config\config.json --count 3 --delay-sec 5
-```
-
-## 8. View Executions
-
-Production Gmail trigger runs usually appear in n8n as saved executions, not as a live animation on the canvas.
-
-Open:
-
-```text
-Executions -> latest trigger execution
-```
-
-Then inspect each node's input and output data.
+If `name` or `email` is missing, or if email format is invalid, the workflow returns a validation error response and does not call Zoho, Telegram, or Google Sheets.
