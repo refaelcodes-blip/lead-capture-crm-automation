@@ -4,6 +4,10 @@ An n8n workflow template for receiving website leads, validating required fields
 
 This repository is a public-safe template. It does not include real tokens, account IDs, app passwords, API keys, or deployment URLs.
 
+## Video Walkthrough
+
+Watch the project demo on YouTube: [Lead Capture CRM Automation](https://www.youtube.com/watch?v=slbElyq-aEU)
+
 ## What It Does
 
 - Receives new leads through an n8n webhook.
